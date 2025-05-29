@@ -3,6 +3,8 @@
   import { CodeMirrorEditor } from '$lib/editor/codemirror-editor.js';
   import FileManager from '$lib/components/FileManager.svelte';
   import FileTree from '$lib/components/FileTree.svelte';
+  import SettingsPanel from '$lib/components/SettingsPanel.svelte';
+  import Toolbar from '$lib/components/Toolbar.svelte';
   import type { FileSystemDirectoryHandle, FileSystemFileHandle } from '$lib/types/filesystem';
   import { EditorView } from '@codemirror/view';
   import { StateEffect } from '@codemirror/state';
@@ -55,9 +57,43 @@ Click "Open Folder" to start working with your files!`;
   let originalContent: string = editorContent;
   let errorMessage: string = '';
 
+  // Settings state
+  let showSettingsPanel = false;
+  let settings = {
+    theme: 'system' as 'light' | 'dark' | 'system',
+    fontFamily: 'JetBrains Mono, Consolas, Monaco, monospace',
+    fontSize: 14,
+    lineHeight: 1.5,
+    showLineNumbers: true,
+    autoSave: true,
+    autoSaveInterval: 30,
+    wysiwygMode: false,
+  };
+
+  // Auto-save timer
+  let autoSaveTimer: number | null = null;
+
   onMount(() => {
+    // Load settings first
+    const savedSettings = localStorage.getItem('writepad-settings');
+    if (savedSettings) {
+      try {
+        settings = { ...settings, ...JSON.parse(savedSettings) };
+      } catch (e) {
+        console.warn('Failed to load settings:', e);
+      }
+    }
+
     if (editorContainer) {
-      editor = new CodeMirrorEditor(editorContainer, editorContent);
+      editor = new CodeMirrorEditor(editorContainer, editorContent, settings.wysiwygMode);
+      
+      // Apply initial settings
+      applySettings();
+      
+      // Start auto-save if enabled
+      if (settings.autoSave) {
+        startAutoSave();
+      }
       
       // Listen for content changes using the correct CodeMirror API
       const view = editor.getView();
@@ -75,6 +111,7 @@ Click "Open Folder" to start working with your files!`;
     }
 
     return () => {
+      stopAutoSave();
       if (editor) {
         editor.destroy();
       }
@@ -133,6 +170,84 @@ Click "Open Folder" to start working with your files!`;
       }
     }
   }
+
+  function handleSettingsChanged(event: CustomEvent) {
+    settings = { ...event.detail };
+    applySettings();
+    
+    // Update WYSIWYG mode in editor
+    if (editor) {
+      editor.setWysiwygMode(settings.wysiwygMode);
+    }
+    
+    // Restart auto-save timer if settings changed
+    if (settings.autoSave) {
+      startAutoSave();
+    } else {
+      stopAutoSave();
+    }
+  }
+
+  function handleToolbarCommand(event: CustomEvent) {
+    if (editor) {
+      const { type, value } = event.detail;
+      editor.executeCommand(type, value);
+      editor.focus();
+    }
+  }
+
+  function applySettings() {
+    if (editor) {
+      // Apply font settings to editor
+      const editorElement = editor.getView().dom;
+      editorElement.style.fontFamily = settings.fontFamily;
+      editorElement.style.fontSize = `${settings.fontSize}px`;
+      editorElement.style.lineHeight = settings.lineHeight.toString();
+      
+      // Apply line numbers setting
+      // Note: This would require reconfiguring the editor with line numbers extension
+      // For now, we'll just store the setting
+    }
+
+    // Apply theme to document
+    applyTheme();
+  }
+
+  function applyTheme() {
+    const root = document.documentElement;
+    const effectiveTheme = settings.theme === 'system' 
+      ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : settings.theme;
+    
+    root.setAttribute('data-theme', effectiveTheme);
+  }
+
+  function startAutoSave() {
+    stopAutoSave(); // Clear any existing timer
+    
+    if (settings.autoSave && settings.autoSaveInterval > 0) {
+      autoSaveTimer = window.setInterval(() => {
+        if (currentFile && isDirty && fileManager) {
+          fileManager.saveFile();
+        }
+      }, settings.autoSaveInterval * 1000);
+    }
+  }
+
+  function stopAutoSave() {
+    if (autoSaveTimer) {
+      clearInterval(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+  }
+
+  function openSettings() {
+    showSettingsPanel = true;
+  }
+
+  function closeSettings() {
+    showSettingsPanel = false;
+  }
 </script>
 
 <svelte:window on:keydown={handleKeyDown} />
@@ -140,15 +255,20 @@ Click "Open Folder" to start working with your files!`;
 <div class="app">
   <header class="app-header">
     <h1>Writepad</h1>
-    <div class="header-info">
-      {#if currentFilePath}
-        <span class="current-file">
-          📄 {currentFilePath}
-          {#if isDirty}<span class="dirty-indicator">●</span>{/if}
-        </span>
-      {:else}
-        <span class="no-file">No file open</span>
-      {/if}
+    <div class="header-controls">
+      <div class="header-info">
+        {#if currentFilePath}
+          <span class="current-file">
+            📄 {currentFilePath}
+            {#if isDirty}<span class="dirty-indicator">●</span>{/if}
+          </span>
+        {:else}
+          <span class="no-file">No file open</span>
+        {/if}
+      </div>
+      <button class="settings-button" on:click={openSettings} aria-label="Open settings">
+        ⚙️
+      </button>
     </div>
   </header>
 
@@ -185,9 +305,22 @@ Click "Open Folder" to start working with your files!`;
         </div>
       {/if}
       
+      <!-- Toolbar for WYSIWYG mode -->
+      <Toolbar 
+        visible={settings.wysiwygMode}
+        on:command={handleToolbarCommand}
+      />
+      
       <div class="editor-container" bind:this={editorContainer}></div>
     </section>
   </main>
+
+  <!-- Settings Panel -->
+  <SettingsPanel 
+    bind:isOpen={showSettingsPanel}
+    on:close={closeSettings}
+    on:settingsChanged={handleSettingsChanged}
+  />
 </div>
 
 <style>
@@ -196,6 +329,17 @@ Click "Open Folder" to start working with your files!`;
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: #f6f8fa;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* Dark theme support */
+  :global([data-theme="dark"]) {
+    color-scheme: dark;
+  }
+
+  :global([data-theme="dark"] body) {
+    background: #0d1117;
+    color: #e6edf3;
   }
 
   .app {
@@ -221,6 +365,12 @@ Click "Open Folder" to start working with your files!`;
     color: #24292f;
   }
 
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
   .header-info {
     font-size: 14px;
     color: #656d76;
@@ -240,6 +390,32 @@ Click "Open Folder" to start working with your files!`;
 
   .no-file {
     opacity: 0.6;
+  }
+
+  .settings-button {
+    background: none;
+    border: 1px solid #e1e5e9;
+    color: #656d76;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 40px;
+    height: 40px;
+  }
+
+  .settings-button:hover {
+    background: #f6f8fa;
+    border-color: #d1d9e0;
+    color: #24292f;
+  }
+
+  .settings-button:active {
+    background: #e1e5e9;
   }
 
   .app-main {
@@ -306,7 +482,8 @@ Click "Open Folder" to start working with your files!`;
 
   .editor-container {
     flex: 1;
-    overflow: hidden;
+    overflow: auto;
+    height: 100%;
   }
 
   /* Responsive design */
@@ -320,5 +497,54 @@ Click "Open Folder" to start working with your files!`;
       align-items: flex-start;
       gap: 8px;
     }
+  }
+
+  /* Dark theme styles */
+  :global([data-theme="dark"]) .app {
+    background: #0d1117;
+    color: #e6edf3;
+  }
+
+  :global([data-theme="dark"]) .app-header {
+    background: #161b22;
+    border-bottom-color: #30363d;
+  }
+
+  :global([data-theme="dark"]) .app-header h1 {
+    color: #e6edf3;
+  }
+
+  :global([data-theme="dark"]) .settings-button {
+    border-color: #30363d;
+    color: #7d8590;
+  }
+
+  :global([data-theme="dark"]) .settings-button:hover {
+    background: #21262d;
+    border-color: #484f58;
+    color: #e6edf3;
+  }
+
+  :global([data-theme="dark"]) .settings-button:active {
+    background: #30363d;
+  }
+
+  :global([data-theme="dark"]) .sidebar {
+    background: #161b22;
+    border-right-color: #30363d;
+  }
+
+  :global([data-theme="dark"]) .empty-state p {
+    color: #7d8590;
+  }
+
+  :global([data-theme="dark"]) .error-banner {
+    background: #2d1b1b;
+    border-color: #6e2c2c;
+    color: #f85149;
+  }
+
+  :global([data-theme="dark"]) .error-banner button {
+    color: #f85149;
   }
 </style>

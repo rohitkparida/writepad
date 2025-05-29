@@ -1,0 +1,284 @@
+/* Code Block Widget Styles */
+.cm-writepad-codeblock {
+  margin: 16px 0;
+  border: 1px solid #e1e5e9;
+  border-radius: 8px;
+  background: #f6f8fa;
+  overflow: hidden;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', Consolas, Monaco, monospace;
+  transition: all 0.2s ease;
+}
+
+.cm-writepad-codeblock:hover {
+  border-color: #d1d9e0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.code-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #e1e5e9;
+  border-bottom: 1px solid #d1d9e0;
+  font-size: 12px;
+}
+
+.language-label {
+  color: #656d76;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.copy-button {
+  background: none;
+  border: none;
+  color: #656d76;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.copy-button:hover {
+  background: #d1d9e0;
+  color: #24292f;
+}
+
+.copy-button:active {
+  background: #c1c9d0;
+}
+
+.code-container {
+  position: relative;
+}
+
+.code-content {
+  margin: 0;
+  padding: 16px;
+  background: #ffffff;
+  color: #24292f;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: inherit;
+}
+
+.code-content code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Syntax highlighting for common languages */
+.language-javascript .code-content,
+.language-js .code-content {
+  color: #24292f;
+}
+
+.language-python .code-content {
+  color: #24292f;
+}
+
+.language-html .code-content {
+  color: #24292f;
+}
+
+.language-css .code-content {
+  color: #24292f;
+}
+
+.language-json .code-content {
+  color: #24292f;
+}
+
+.language-markdown .code-content,
+.language-md .code-content {
+  color: #24292f;
+}
+
+.language-bash .code-content,
+.language-shell .code-content,
+.language-sh .code-content {
+  color: #24292f;
+  background: #161b22;
+}
+
+.language-bash .code-content,
+.language-shell .code-content,
+.language-sh .code-content {
+  color: #e6edf3;
+}
+
+/* Basic syntax highlighting patterns */
+.code-content {
+  /* Keywords */
+  --keyword-color: #cf222e;
+  /* Strings */
+  --string-color: #0a3069;
+  /* Comments */
+  --comment-color: #656d76;
+  /* Numbers */
+  --number-color: #0550ae;
+  /* Functions */
+  --function-color: #8250df;
+}
+
+/* Scrollbar styling for code blocks */
+.code-content::-webkit-scrollbar {
+  height: 8px;
+}
+
+.code-content::-webkit-scrollbar-track {
+  background: #f1f3f4;
+  border-radius: 4px;
+}
+
+.code-content::-webkit-scrollbar-thumb {
+  background: #c1c9d0;
+  border-radius: 4px;
+}
+
+.code-content::-webkit-scrollbar-thumb:hover {
+  background: #a8b3c1;
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .cm-writepad-codeblock {
+    background: #161b22;
+    border-color: #30363d;
+  }
+
+  .cm-writepad-codeblock:hover {
+    border-color: #484f58;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .code-header {
+    background: #21262d;
+    border-bottom-color: #30363d;
+  }
+
+  .language-label {
+    color: #7d8590;
+  }
+
+  .copy-button {
+    color: #7d8590;
+  }
+
+  .copy-button:hover {
+    background: #30363d;
+    color: #e6edf3;
+  }
+
+  .copy-button:active {
+    background: #484f58;
+  }
+
+  .code-content {
+    background: #0d1117;
+    color: #e6edf3;
+  }
+
+  .code-content::-webkit-scrollbar-track {
+    background: #21262d;
+  }
+
+  .code-content::-webkit-scrollbar-thumb {
+    background: #484f58;
+  }
+
+  .code-content::-webkit-scrollbar-thumb:hover {
+    background: #6e7681;
+  }
+
+  /* Dark theme syntax highlighting */
+  .code-content {
+    --keyword-color: #ff7b72;
+    --string-color: #a5d6ff;
+    --comment-color: #8b949e;
+    --number-color: #79c0ff;
+    --function-color: #d2a8ff;
+  }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .cm-writepad-codeblock {
+    margin: 12px 0;
+    border-radius: 6px;
+  }
+
+  .code-header {
+    padding: 6px 12px;
+  }
+
+  .code-content {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .copy-button {
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+}
+
+/* Animation for copy success */
+@keyframes copySuccess {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.copy-button.copied {
+  animation: copySuccess 0.3s ease;
+}
+
+/* Focus styles for accessibility */
+.copy-button:focus {
+  outline: 2px solid #0969da;
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .copy-button:focus {
+    outline-color: #1f6feb;
+  }
+}
+
+/* Language-specific styling */
+.language-bash .code-header,
+.language-shell .code-header,
+.language-sh .code-header {
+  background: #2d3748;
+  color: #e2e8f0;
+}
+
+.language-bash .language-label,
+.language-shell .language-label,
+.language-sh .language-label {
+  color: #e2e8f0;
+}
+
+.language-bash .copy-button,
+.language-shell .copy-button,
+.language-sh .copy-button {
+  color: #e2e8f0;
+}
+
+.language-bash .copy-button:hover,
+.language-shell .copy-button:hover,
+.language-sh .copy-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+} 

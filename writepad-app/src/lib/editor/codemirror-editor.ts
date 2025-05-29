@@ -1,16 +1,19 @@
 import { EditorView, keymap, lineNumbers, drawSelection, highlightSpecialChars } from '@codemirror/view';
-import { EditorState, type Extension } from '@codemirror/state';
+import { EditorState, type Extension, StateField, StateEffect } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { GFM, Table, TaskList, Strikethrough } from '@lezer/markdown';
 import { syntaxHighlighting, HighlightStyle, indentOnInput, bracketMatching, foldGutter } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { tags } from '@lezer/highlight';
-import { richStylingPlugin } from './rich-styling-plugin.js';
+import { createRichStylingPlugin } from './rich-styling-plugin.js';
 import { tableWidgetField, tableEventHandler } from './table-widget.js';
-import { taskWidgetField, taskEventHandler } from './task-widget.js';
+import { taskLineDecorationField, taskLineEventHandler, taskLineTheme } from './task-line-decoration.js';
+import { codeWidgetField, codeEventHandler } from './code-widget.js';
+import { wysiwygKeymap } from './wysiwyg-keymap.js';
+import { wysiwygCommands, type CommandType } from './wysiwyg-commands.js';
 import './rich-styling.css';
 import './table-widget.css';
-import './task-widget.css';
+import './code-widget.css';
 
 // Create a custom highlight style for our markdown
 const markdownHighlightStyle = HighlightStyle.define([
@@ -41,87 +44,19 @@ const basicExtensions: Extension[] = [
 export class CodeMirrorEditor {
   private view: EditorView;
   private container: HTMLElement;
-  private taskToggleListener: (event: Event) => void;
+  private wysiwygMode: boolean = false;
 
-  constructor(container: HTMLElement, initialContent: string = '') {
+  constructor(container: HTMLElement, initialContent: string = '', wysiwygMode: boolean = false) {
     this.container = container;
+    this.wysiwygMode = wysiwygMode;
     
     // Clear the container
     container.innerHTML = '';
     
-    // Create the task toggle listener
-    this.taskToggleListener = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { originalSource, updatedSource } = customEvent.detail;
-      
-      // Find the position of the original source in the document
-      const doc = this.view.state.doc;
-      const docText = doc.toString();
-      const sourceIndex = docText.indexOf(originalSource);
-      
-      if (sourceIndex !== -1) {
-        // Replace the original source with the updated source
-        this.view.dispatch({
-          changes: {
-            from: sourceIndex,
-            to: sourceIndex + originalSource.length,
-            insert: updatedSource
-          }
-        });
-      }
-    };
-
     // Create the editor state
     const state = EditorState.create({
       doc: initialContent,
-      extensions: [
-        ...basicExtensions,
-        markdown({
-          extensions: [GFM, Table, TaskList, Strikethrough]
-        }),
-        syntaxHighlighting(markdownHighlightStyle),
-        richStylingPlugin,
-        tableWidgetField,
-        taskWidgetField,
-        EditorView.domEventHandlers({
-          mousedown: (event: MouseEvent, view: EditorView) => {
-            // Try task handler first for checkboxes
-            const taskResult = taskEventHandler.mousedown(event, view);
-            if (taskResult === true) {
-              return true; // Stop processing if task handler says to prevent default
-            }
-            
-            // Try table handler
-            const tableResult = tableEventHandler.mousedown(event, view);
-            if (tableResult !== false) {
-              return tableResult;
-            }
-            
-            return false;
-          }
-        }),
-        EditorView.theme({
-          '&': {
-            fontSize: '16px',
-            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-          },
-          '.cm-content': {
-            padding: '20px',
-            lineHeight: '1.6',
-            minHeight: '400px'
-          },
-          '.cm-focused': {
-            outline: 'none'
-          },
-          '.cm-editor': {
-            borderRadius: '8px',
-            border: '1px solid #e1e5e9'
-          },
-          '.cm-scroller': {
-            background: 'white'
-          }
-        })
-      ]
+      extensions: this.createExtensions()
     });
 
     // Create the editor view
@@ -129,13 +64,76 @@ export class CodeMirrorEditor {
       state,
       parent: container
     });
-
-    // Add event listener for task toggles
-    this.setupTaskToggleListener();
   }
 
-  private setupTaskToggleListener() {
-    document.addEventListener('updateTaskSource', this.taskToggleListener);
+  private createExtensions(): Extension[] {
+    const extensions = [
+      ...basicExtensions,
+      markdown({
+        extensions: [GFM, Table, TaskList, Strikethrough]
+      }),
+      syntaxHighlighting(markdownHighlightStyle),
+      createRichStylingPlugin(this.wysiwygMode),
+      tableWidgetField,
+      taskLineDecorationField,
+      taskLineTheme,
+      codeWidgetField,
+      EditorView.domEventHandlers({
+        mousedown: (event: MouseEvent, view: EditorView) => {
+          // Try task line handler first
+          const taskResult = taskLineEventHandler.mousedown(event, view);
+          if (taskResult === true) {
+            return true; // Stop processing if task handler says to prevent default
+          }
+          
+          // Try table handler
+          const tableResult = tableEventHandler.mousedown(event, view);
+          if (tableResult !== false) {
+            return tableResult;
+          }
+          
+          // Try code handler
+          const codeResult = codeEventHandler.mousedown(event, view);
+          if (codeResult !== false) {
+            return codeResult;
+          }
+          
+          return false;
+        }
+      }),
+      EditorView.theme({
+        '&': {
+          fontSize: '16px',
+          fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          height: '100%'
+        },
+        '.cm-content': {
+          padding: '20px',
+          lineHeight: '1.6',
+          minHeight: '400px'
+        },
+        '.cm-focused': {
+          outline: 'none'
+        },
+        '.cm-editor': {
+          borderRadius: this.wysiwygMode ? '0 0 8px 8px' : '8px',
+          border: '1px solid #e1e5e9',
+          height: '100%'
+        },
+        '.cm-scroller': {
+          background: 'white',
+          overflowY: 'auto',
+          height: '100%'
+        }
+      })
+    ];
+
+    // Add WYSIWYG keymap if in WYSIWYG mode
+    if (this.wysiwygMode) {
+      extensions.push(wysiwygKeymap);
+    }
+
+    return extensions;
   }
 
   setValue(content: string) {
@@ -158,10 +156,31 @@ export class CodeMirrorEditor {
 
   destroy() {
     this.view.destroy();
-    document.removeEventListener('updateTaskSource', this.taskToggleListener);
   }
 
   getView(): EditorView {
     return this.view;
+  }
+
+  // Execute WYSIWYG commands
+  executeCommand(command: CommandType, value?: any): boolean {
+    if (wysiwygCommands[command]) {
+      return wysiwygCommands[command].execute(this.view, value);
+    }
+    return false;
+  }
+
+  // Update WYSIWYG mode
+  setWysiwygMode(enabled: boolean) {
+    this.wysiwygMode = enabled;
+    
+    // Recreate extensions with new WYSIWYG mode
+    this.view.dispatch({
+      effects: StateEffect.reconfigure.of(this.createExtensions())
+    });
+  }
+
+  isWysiwygMode(): boolean {
+    return this.wysiwygMode;
   }
 } 

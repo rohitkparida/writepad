@@ -49,8 +49,10 @@ const decorationHorizontalRule = Decoration.mark({ class: 'wp-horizontal-rule' }
 
 class RichStylingPlugin implements PluginValue {
   decorations: DecorationSet;
+  wysiwygMode: boolean;
 
-  constructor(view: EditorView) {
+  constructor(view: EditorView, wysiwygMode: boolean = false) {
+    this.wysiwygMode = wysiwygMode;
     this.decorations = this.process(view);
   }
 
@@ -63,13 +65,16 @@ class RichStylingPlugin implements PluginValue {
   process(view: EditorView): DecorationSet {
     const widgets: Range<Decoration>[] = [];
     const [cursor] = view.state.selection.ranges;
+    const wysiwygMode = this.wysiwygMode; // Capture for use in iterator
 
     for (const { from, to } of view.visibleRanges) {
       syntaxTree(view.state).iterate({
         from,
         to,
-        enter(node) {
+        enter: (node) => {
           const cursorInNode = cursor.from >= node.from && cursor.to <= node.to;
+          // In WYSIWYG mode, always hide syntax regardless of cursor position
+          const shouldHideSyntax = wysiwygMode || !cursorInNode;
           
           // Handle different node types
           switch (node.name) {
@@ -83,44 +88,44 @@ class RichStylingPlugin implements PluginValue {
             case 'ATXHeading4':
             case 'ATXHeading5':
             case 'ATXHeading6':
-              if (!cursorInNode) {
+              if (shouldHideSyntax) {
                 widgets.push(decorationHeading.range(node.from, node.to));
               }
               break;
               
             case 'Emphasis':
-              if (!cursorInNode) {
+              if (shouldHideSyntax) {
                 widgets.push(decorationEmphasis.range(node.from, node.to));
               }
               break;
               
             case 'StrongEmphasis':
-              if (!cursorInNode) {
+              if (shouldHideSyntax) {
                 widgets.push(decorationStrong.range(node.from, node.to));
               }
               break;
               
             case 'InlineCode':
-              if (!cursorInNode) {
+              if (shouldHideSyntax) {
                 widgets.push(decorationInlineCode.range(node.from, node.to));
               }
               break;
               
             case 'Link':
             case 'Autolink':
-              if (!cursorInNode) {
+              if (shouldHideSyntax) {
                 widgets.push(decorationLink.range(node.from, node.to));
               }
               break;
               
             case 'Strikethrough':
-              if (!cursorInNode) {
+              if (shouldHideSyntax) {
                 widgets.push(decorationStrikethrough.range(node.from, node.to));
               }
               break;
               
             case 'Blockquote':
-              if (!cursorInNode) {
+              if (shouldHideSyntax) {
                 widgets.push(decorationBlockquote.range(node.from, node.to));
               }
               break;
@@ -132,14 +137,14 @@ class RichStylingPlugin implements PluginValue {
             case 'ListMark':
               // Hide list markers and replace with bullets
               if (node.matchContext(['BulletList', 'ListItem']) &&
-                  cursor.from !== node.from && cursor.from !== node.from + 1) {
+                  (wysiwygMode || (cursor.from !== node.from && cursor.from !== node.from + 1))) {
                 widgets.push(decorationBullet.range(node.from, node.to));
               }
               break;
               
             case 'HeaderMark':
-              // Hide header marks (###) when not at cursor
-              if (!cursorInNode) {
+              // Hide header marks (###) when not at cursor or in WYSIWYG mode
+              if (shouldHideSyntax) {
                 widgets.push(decorationHidden.range(node.from, node.to));
               }
               break;
@@ -150,22 +155,22 @@ class RichStylingPlugin implements PluginValue {
             case 'QuoteMark':
             case 'TaskMarker':
             case 'TableDelimiter':
-              // Hide markup when not at cursor
-              if (!cursorInNode) {
+              // Hide markup when not at cursor or in WYSIWYG mode
+              if (shouldHideSyntax) {
                 widgets.push(decorationHidden.range(node.from, node.to));
               }
               break;
               
             case 'URL':
-              // Hide URLs in links when not at cursor
-              if (!cursorInNode) {
+              // Hide URLs in links when not at cursor or in WYSIWYG mode
+              if (shouldHideSyntax) {
                 widgets.push(decorationHidden.range(node.from, node.to));
               }
               break;
           }
 
-          // Skip processing children if this is a rich element and cursor is inside
-          if (richElements.includes(node.name) && cursorInNode) {
+          // Skip processing children if this is a rich element and cursor is inside (unless WYSIWYG mode)
+          if (richElements.includes(node.name) && cursorInNode && !wysiwygMode) {
             return false;
           }
         }
@@ -176,6 +181,19 @@ class RichStylingPlugin implements PluginValue {
   }
 }
 
-export const richStylingPlugin = ViewPlugin.fromClass(RichStylingPlugin, {
-  decorations: v => v.decorations
-}); 
+// Export a factory function that accepts wysiwygMode
+export function createRichStylingPlugin(wysiwygMode: boolean = false) {
+  return ViewPlugin.fromClass(
+    class extends RichStylingPlugin {
+      constructor(view: EditorView) {
+        super(view, wysiwygMode);
+      }
+    },
+    {
+      decorations: v => v.decorations
+    }
+  );
+}
+
+// Keep the original export for backward compatibility
+export const richStylingPlugin = createRichStylingPlugin(false); 
